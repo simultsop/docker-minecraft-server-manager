@@ -2,6 +2,8 @@
 
 __Would make sense for personal use only!__
 
+<img src="screenshot.png" alt="screenshot" width="500"/>
+
 ---
 
 ### Running this project would require docker installed.
