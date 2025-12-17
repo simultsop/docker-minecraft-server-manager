@@ -4,7 +4,7 @@ __Would make sense for personal use only!__
 
 ---
 
-# Running this project would require docker installed.
+### Running this project would require docker installed.
 
 # What is Docker?
 Docker is a **platform for developing, shipping, and running applications** in isolated environments.
