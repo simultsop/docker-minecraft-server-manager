@@ -1,4 +1,4 @@
-(Upcoming) Full story for this repo can be [read here](https://mentorgashi.com/posts-html/becoming_disposable).
+Full story for this repo can be [read here](https://mentorgashi.com/posts-html/becoming_disposable).
 
 __Would make sense for personal use only!__
 
