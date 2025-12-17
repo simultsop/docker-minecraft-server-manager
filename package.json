@@ -1,0 +1,13 @@
+{
+  "name": "mc-server-manager",
+  "version": "1.0.0",
+  "description": "Minecraft Server Manager in Docker",
+  "main": "mc-server-manager.js",
+  "type": "module", 
+  "scripts": {
+    "start": "node mc-server-manager.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

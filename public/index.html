@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Server Manager</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container-list { margin-top: 20px; }
+        .container-row { border: 1px solid #ccc; padding: 10px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+        .container-info { flex-grow: 1; }
+        .status-running { color: green; font-weight: bold; }
+        .status-stopped { color: red; }
+        .status-exited { color: orange; }
+        button { padding: 5px 10px; margin-left: 5px; cursor: pointer; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #create-section { border: 1px solid #333; padding: 15px; margin-bottom: 20px; background-color: #f9f9f9; }
+        .manager-container { background-color: #ffe0b2; border-left: 5px solid orange; }
+        
+        .create-input-group { margin-bottom: 10px; }
+        .create-input-group label { display: inline-block; width: 110px; }
+
+        /* Advanced Toggle Styles */
+        .advanced-link {
+            display: inline-block;
+            color: #0066cc;
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+            user-select: none;
+        }
+        #advanced-fields {
+            display: none; /* Hidden by default */
+            border: 1px dashed #bbb;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Minecraft Server Manager</h1>
+    
+    <div id="create-section">
+        <h2>Create New Server</h2>
+        <p>Choose a server type below. Use advanced settings to customize naming and ports.</p>
+
+        <div>
+            <button onclick="createContainer('minecraft-java')">Create Java Edition</button>
+            <button onclick="createContainer('minecraft-bedrock')">Create Bedrock Edition</button>
+        </div>
+
+
+        <div class="advanced-link" id="toggle-advanced" onclick="toggleAdvanced()">+ Show Advanced Settings (Name/Port)</div>
+
+        <div id="advanced-fields">
+            <div class="create-input-group">
+                <label for="server-name">Container Name:</label>
+                <input type="text" id="server-name" placeholder="e.g., mc-server-1" value="mc-new-server">
+            </div>
+            
+            <div class="create-input-group">
+                <label for="host-port">Host Port:</label>
+                <input type="number" id="host-port" placeholder="e.g., 25565" value="25565">
+                <small> (Reverse/Public Port)</small>
+            </div>
+        </div>
+
+    </div>
+
+    <button onclick="fetchContainers()">Refresh Containers</button>
+    <div id="container-list" class="container-list">Loading...</div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', fetchContainers);
+
+        const MANAGER_IMAGE_NAME = 'node:alpine';
+
+        function toggleAdvanced() {
+            const fields = document.getElementById('advanced-fields');
+            const link = document.getElementById('toggle-advanced');
+            if (fields.style.display === 'none' || fields.style.display === '') {
+                fields.style.display = 'block';
+                link.textContent = '- Hide Advanced Settings';
+            } else {
+                fields.style.display = 'none';
+                link.textContent = '+ Show Advanced Settings (Name/Port)';
+            }
+        }
+
+        async function fetchContainers() {
+            const listDiv = document.getElementById('container-list');
+            listDiv.innerHTML = 'Loading containers...';
+
+            try {
+                const response = await fetch('/api/containers');
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderContainers(data.stdout);
+                } else {
+                    listDiv.innerHTML = `<p style="color:red;">Error fetching containers: ${data.message}</p>`;
+                }
+            } catch (error) {
+                listDiv.innerHTML = `<p style="color:red;">Failed to connect to API: ${error.message}. Ensure the server is running and port 3000 is exposed.</p>`;
+            }
+        }
+
+        function renderContainers(rawOutput) {
+            const lines = rawOutput.split('\n').filter(line => line.trim() !== '');
+            if (lines.length === 0 || lines.length === 1 && lines[0].includes('CONTAINER ID')) {
+                 const listDiv = document.getElementById('container-list');
+                 listDiv.innerHTML = '<h2>Containers (Showing 0 total)</h2><p>No Minecraft server containers found. Use the "Create" buttons above!</p>';
+                 return;
+            }
+            
+            const header = lines.shift(); 
+            const listDiv = document.getElementById('container-list');
+            listDiv.innerHTML = `<h2>Containers (Showing ${lines.length} total)</h2>`;
+            
+            lines.forEach(line => {
+                const parts = line.trim().split(/\s{2,}/);
+                
+                const id = parts[0];
+                const image = parts[1];
+                const status = parts[4]; 
+                
+                const rest = parts.slice(5);
+                const name = rest.pop() || 'N/A';
+                const ports = rest.join(' ') || 'None';
+                
+                const isManager = image.includes(MANAGER_IMAGE_NAME) && name.includes('mc-server-manager');
+                
+                let statusClass = 'status-stopped';
+                if (status.includes('Up')) {
+                    statusClass = 'status-running';
+                } else if (status.includes('Exited')) {
+                    statusClass = 'status-exited';
+                }
+                
+                const isRunning = status.includes('Up');
+                const isDisabled = isManager;
+
+                const row = document.createElement('div');
+                row.className = 'container-row' + (isManager ? ' manager-container' : '');
+                
+                const controlButtons = `
+                    <button 
+                        onclick="controlContainer('${id}', 'start', this)" 
+                        ${isRunning || isDisabled ? 'disabled' : ''}
+                    >
+                        Start
+                    </button>
+                    <button 
+                        onclick="controlContainer('${id}', 'stop', this)" 
+                        ${!isRunning || isDisabled ? 'disabled' : ''}
+                    >
+                        Stop
+                    </button>
+                    <button 
+                        onclick="controlContainer('${id}', 'restart', this)" 
+                        ${!isRunning || isDisabled ? 'disabled' : ''}
+                    >
+                        Restart
+                    </button>
+                    <button 
+                        onclick="controlContainer('${id}', 'remove', this, true)" 
+                        style="background-color: ${isDisabled ? '#ccc' : '#f44336'}; color: white;"
+                        ${isDisabled ? 'disabled' : ''}
+                    >
+                        Remove
+                    </button>
+                `;
+
+                row.innerHTML = `
+                    <div class="container-info">
+                        <strong>Name:</strong> ${name} ${isManager ? '(This Manager)' : ''} (${id})<br>
+                        <strong>Image:</strong> ${image}<br>
+                        <strong>Status:</strong> <span class="${statusClass}">${status}</span><br>
+                        <strong>Ports:</strong> ${ports || 'N/A'}
+                    </div>
+                    <div>
+                        ${controlButtons}
+                    </div>
+                `;
+                listDiv.appendChild(row);
+            });
+        }
+        
+        async function controlContainer(id, action, button, requiresConfirm = false) {
+            const row = button.closest('.container-row');
+            if (row && row.classList.contains('manager-container')) {
+                 alert("Cannot control the server manager's own container.");
+                 return;
+            }
+
+            if (requiresConfirm && !confirm(`Are you sure you want to ${action} container ${id} (${action.toUpperCase()} will permanently delete the container)?`)) {
+                return;
+            }
+            
+            button.disabled = true;
+            const originalText = button.textContent;
+            button.textContent = 'Processing...';
+
+            try {
+                const response = await fetch(`/api/${action}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`Container ${id} successfully requested to ${action}. Refreshing list...`);
+                    fetchContainers();
+                } else {
+                    alert(`Failed to ${action} container ${id}:\n${data.details}`);
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }
+            } catch (error) {
+                alert(`API Error: Could not reach the server to ${action}.`);
+                button.textContent = originalText;
+                button.disabled = false;
+            }
+        }
+        
+        async function createContainer(type) {
+            const containerName = document.getElementById('server-name').value.trim();
+            const hostPort = document.getElementById('host-port').value.trim();
+            
+            if (!containerName) {
+                alert('Please enter a container name.');
+                return;
+            }
+            if (!hostPort) {
+                alert('Please enter a host port.');
+                return;
+            }
+            
+            const portNum = parseInt(hostPort);
+            if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
+                alert('The host port must be a valid number between 1 and 65535.');
+                return;
+            }
+
+             if (!confirm(`Are you sure you want to create the '${type}' server named '${containerName}' on host port ${hostPort}?`)) {
+                return;
+            }
+            
+            const createButton = event.target; 
+            createButton.disabled = true;
+            const originalText = createButton.textContent;
+            createButton.textContent = 'Creating...';
+
+            try {
+                const response = await fetch('/api/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        type: type,
+                        name: containerName,
+                        port: hostPort
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`Successfully created and started new server: ${containerName}. Refreshing list...`);
+                    document.getElementById('server-name').value = 'mc-new-server';
+                    document.getElementById('host-port').value = '25565';
+                    fetchContainers();
+                } else {
+                    alert(`Failed to create server:\n${data.details}`);
+                }
+            } catch (error) {
+                alert(`API Error: Could not reach the server to create.`);
+            } finally {
+                createButton.textContent = originalText;
+                createButton.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
